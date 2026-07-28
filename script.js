@@ -113,14 +113,17 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 // =========================================================
 // DAFTAR SANTRI (halaqah sendiri)
 // =========================================================
+let daftarSantriHalaqah = []; // disimpan di memori, dipakai untuk hitung ulang badge tanpa fetch ulang
+
 async function muatDaftarSantri() {
   const container = document.getElementById("daftar-santri");
   container.innerHTML = '<p class="empty-state">Memuat data santri...</p>';
   try {
     const result = await callApi({ action: "getDaftarSantri", halaqah: currentUstadz.halaqah });
     if (result.success) {
-      renderDaftarSantri(result.data, container);
-      updateProgressBadge(result.data);
+      daftarSantriHalaqah = result.data;
+      renderDaftarSantri(daftarSantriHalaqah, container);
+      updateProgressBadge(daftarSantriHalaqah);
     } else {
       container.innerHTML = '<p class="empty-state">' + result.message + "</p>";
     }
@@ -190,12 +193,12 @@ async function toggleStatus(santri, btnEl, cardEl) {
       btnEl.className = "status-toggle " + (isSetor ? "setor" : "belum");
       btnEl.textContent = isSetor ? "Sudah Setor" : "Belum Setor";
       showToast(santri.nama + " ditandai " + statusBaru);
-      // refresh progress badge kalau santri ini dari halaqah sendiri
-      if (santri.halaqah === currentUstadz.halaqah) {
-        const daftar = document.querySelectorAll("#daftar-santri .santri-item");
-        // hitung ulang sederhana dengan re-fetch ringan tidak perlu; hitung manual:
-      }
-      muatUlangBadgeProgress();
+
+      // Sinkronkan ke daftar di memori (mencakup kasus toggle dari hasil pencarian
+      // lintas halaqah) lalu hitung ulang badge secara lokal — tanpa fetch ulang ke server.
+      const entri = daftarSantriHalaqah.find((s) => s.id === santri.id);
+      if (entri) entri.status = statusBaru;
+      updateProgressBadge(daftarSantriHalaqah);
     } else {
       showToast(result.message || "Gagal menyimpan", true);
     }
@@ -203,15 +206,6 @@ async function toggleStatus(santri, btnEl, cardEl) {
     showToast("Gagal: " + err.message, true);
   } finally {
     btnEl.disabled = false;
-  }
-}
-
-async function muatUlangBadgeProgress() {
-  try {
-    const result = await callApi({ action: "getDaftarSantri", halaqah: currentUstadz.halaqah });
-    if (result.success) updateProgressBadge(result.data);
-  } catch (err) {
-    /* silent */
   }
 }
 
@@ -312,43 +306,19 @@ async function muatRekapHarian() {
   try {
     const tanggal = document.getElementById("filter-tanggal").value;
 
-    // Ambil SEMUA santri (semua halaqah) + catatan setoran pada tanggal terpilih,
-    // lalu digabung supaya santri yang belum pernah ditandai tetap tampil sebagai "Belum Setor".
-    const [resSantri, resRekap] = await Promise.all([
-      callApi({ action: "getDaftarSantri" }),
-      callApi({ action: "getRekapHarian", tanggal }),
-    ]);
+    // 1x panggilan API: backend yang menggabungkan daftar santri + catatan setoran,
+    // supaya santri yang belum pernah ditandai tetap tampil sebagai "Belum Setor".
+    const result = await callApi({ action: "getRekapHarianLengkap", tanggal });
 
-    if (!resSantri.success) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + resSantri.message + "</td></tr>";
-      return;
-    }
-    if (!resRekap.success) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + resRekap.message + "</td></tr>";
+    if (!result.success) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + result.message + "</td></tr>";
       return;
     }
 
-    const catatanMap = {};
-    resRekap.data.forEach((r) => {
-      catatanMap[r.idSantri] = r;
+    const data = [...result.data].sort((a, b) => {
+      const h = String(a.halaqah).localeCompare(String(b.halaqah));
+      return h !== 0 ? h : String(a.nama).localeCompare(String(b.nama));
     });
-
-    const data = resSantri.data
-      .map((santri) => {
-        const catatan = catatanMap[santri.id];
-        return {
-          tanggal,
-          idSantri: santri.id,
-          nama: santri.nama,
-          halaqah: santri.halaqah,
-          status: catatan ? catatan.status : "Belum Setor",
-          dicatatOleh: catatan ? catatan.dicatatOleh : "-",
-        };
-      })
-      .sort((a, b) => {
-        const h = String(a.halaqah).localeCompare(String(b.halaqah));
-        return h !== 0 ? h : String(a.nama).localeCompare(String(b.nama));
-      });
 
     dataRekapTerakhir = data;
     renderTabelRekap(data);
@@ -366,21 +336,15 @@ async function muatRekapBulanan() {
   const tahun = Number(document.getElementById("filter-tahun").value);
 
   try {
-    const [resSantri, resRekap] = await Promise.all([
-      callApi({ action: "getDaftarSantri" }), // tanpa halaqah = semua santri, semua halaqah
-      callApi({ action: "getRekapBulanan", bulan, tahun }), // tanpa halaqah = semua halaqah
-    ]);
+    // 1x panggilan API: backend mengembalikan daftar santri + rekap bulan sekaligus
+    const result = await callApi({ action: "getRekapBulananLengkap", bulan, tahun });
 
-    if (!resSantri.success) {
-      container.innerHTML = '<p class="empty-state">' + resSantri.message + "</p>";
-      return;
-    }
-    if (!resRekap.success) {
-      container.innerHTML = '<p class="empty-state">' + resRekap.message + "</p>";
+    if (!result.success) {
+      container.innerHTML = '<p class="empty-state">' + result.message + "</p>";
       return;
     }
 
-    renderTabelBulanan(resSantri.data, resRekap.data, bulan, tahun);
+    renderTabelBulanan(result.daftarSantri, result.rekapData, bulan, tahun);
   } catch (err) {
     container.innerHTML = '<p class="empty-state">Gagal memuat: ' + err.message + "</p>";
   }
