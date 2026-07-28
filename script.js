@@ -1,7 +1,7 @@
 // =========================================================
 // KONFIGURASI — ganti dengan URL Web App Apps Script kamu
 // =========================================================
-const API_URL = "https://script.google.com/macros/s/GANTI_DENGAN_ID_DEPLOYMENT/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby5Mygt23ulmb_gzVK5NjG7bq8Y5r6NgbtWIGjG5-VQESKZRvQhIIYNRVJxFMMKlgR8Zg/exec";
 
 // =========================================================
 // STATE
