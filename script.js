@@ -1,7 +1,7 @@
 // =========================================================
 // KONFIGURASI — ganti dengan URL Web App Apps Script kamu
 // =========================================================
-const API_URL = "https://script.google.com/macros/s/AKfycby5Mygt23ulmb_gzVK5NjG7bq8Y5r6NgbtWIGjG5-VQESKZRvQhIIYNRVJxFMMKlgR8Zg/exec";
+const API_URL = "https://script.google.com/macros/s/GANTI_DENGAN_ID_DEPLOYMENT/exec";
 
 // =========================================================
 // STATE
@@ -101,6 +101,12 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById(btn.dataset.tab).classList.add("active");
+
+    // Setiap kali tab Rekap dibuka, tarik ulang data terbaru dari server
+    // (supaya tidak menampilkan data basi setelah ada input baru).
+    if (btn.dataset.tab === "tab-rekap") {
+      muatRekap();
+    }
   });
 });
 
@@ -279,6 +285,9 @@ document.querySelectorAll(".mode-btn").forEach((btn) => {
     document.getElementById("rekap-harian-view").classList.toggle("hidden", rekapMode !== "harian");
     document.getElementById("rekap-bulanan-view").classList.toggle("hidden", rekapMode !== "bulanan");
     document.getElementById("rekap-summary").classList.add("hidden");
+
+    // Otomatis muat data untuk mode yang baru dipilih
+    muatRekap();
   });
 });
 
